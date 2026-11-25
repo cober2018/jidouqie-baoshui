@@ -76,7 +76,7 @@ def main():
     if annual and not res["所属期"]["止"].endswith("12-31"):
         sys.exit("年报的所属期必须截止到 12 月 31 日")
     ly = res.get("上年金额") or {}
-    if annual and not (ly.get("利润表") and ly.get("现金流量表")):
+    if annual and not res.get("首年") and not (ly.get("利润表") and ly.get("现金流量表")):
         sys.exit("年报需要提供利润表和现金流量表的上年金额")
     if not res["现金流量表"].get("本年累计"):
         sys.exit("缺少现金流量表本年累计数据，请核对期初资料")
@@ -96,7 +96,7 @@ def main():
     rb = xlrd.open_workbook(str(args.template), formatting_info=True)
     tin, name = res["公司"]["税号"], res["公司"]["名称"]
     d1, d2 = res["所属期"]["起"], res["所属期"]["止"]
-    if annual: d1 = d2[:4] + "-01-01"
+    if annual and not res.get("首年"): d1 = d2[:4] + "-01-01"
     expect = []
     for label, (first, second) in data.items():
         matches = [(i, sh) for i, sh in enumerate(rb.sheets()) if sh.name.strip().startswith(label)]

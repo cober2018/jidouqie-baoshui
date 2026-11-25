@@ -5,6 +5,7 @@
 {
  "公司": {"名称": "...", "税号": "..."},
  "所属期": {"起": "2000-01-01", "止": "2000-03-31", "报表": "季报" | "年报"},
+ "首年": true,                                  # 可选：新设立企业首个会计期间，期初为零且免填上期
  "上期": "上期报表.json"                        # parse_prior_report.py 的输出路径，或直接内嵌同结构对象
  "上期现金流量表本年累计": {行次: 值}            # 可选：上期没有现金流量表时，按记账规则倒推后填这里
  "上年金额": {"利润表": {行次: 值}, "现金流量表": {行次: 值}}   # 仅年报需要，来自上年年报
@@ -161,12 +162,15 @@ def main():
     ap.add_argument("work"); ap.add_argument("out"); ap.add_argument("--明细", dest="detail")
     a = ap.parse_args()
     w = json.load(open(a.work, encoding="utf-8"))
-    prior = w["上期"]
+    first = bool(w.get("首年"))
+    prior = w.get("上期")
     if isinstance(prior, str):
         prior = json.load(open(prior, encoding="utf-8"))
+    if first and not prior:
+        prior = {"资产负债表": {"期末": {}, "年初": {}}}
     start, end = w["所属期"]["起"], w["所属期"]["止"]
     kind = w["所属期"].get("报表", "季报")
-    new_year = start[5:] == "01-01"
+    new_year = first or start[5:] == "01-01"
     errors, warns = [], []
 
     pb_end = keyed(prior["资产负债表"]["期末"])
@@ -277,12 +281,17 @@ def main():
         "科目发生额": {acc: {"借": q(v[0]), "贷": q(v[1])} for acc, v in sorted(flows.items())},
         "校验": checks, "错误": errors, "提醒": warns,
     }
+    if first:
+        res["首年"] = True
     if kind == "年报" or w.get("上年金额") or end[5:] == "12-31":
-        ly = w.get("上年金额") or {}
-        res["上年金额"] = {"利润表": {int(k): v for k, v in (ly.get("利润表") or {}).items()},
-                       "现金流量表": {int(k): v for k, v in (ly.get("现金流量表") or {}).items()}}
-        if not (ly.get("利润表") and ly.get("现金流量表")):
-            warns.append("⚠️ 填写年报前，请补齐利润表和现金流量表的上年金额")
+        if first:
+            res["上年金额"] = {"利润表": {}, "现金流量表": {}}
+        else:
+            ly = w.get("上年金额") or {}
+            res["上年金额"] = {"利润表": {int(k): v for k, v in (ly.get("利润表") or {}).items()},
+                           "现金流量表": {int(k): v for k, v in (ly.get("现金流量表") or {}).items()}}
+            if not (ly.get("利润表") and ly.get("现金流量表")):
+                warns.append("⚠️ 填写年报前，请补齐利润表和现金流量表的上年金额")
     json.dump(res, open(a.out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 
     if a.detail:
